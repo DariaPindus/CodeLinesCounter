@@ -4,7 +4,7 @@ public class Main {
             System.out.println("Please, specify one parameter (file or folder name)");
             return;
         }
-            
+
         String filename = args[0];
 
         JavaCodeLinesCounter codeLinesCounter = new JavaCodeLinesCounter(filename);

@@ -3,7 +3,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -12,6 +11,11 @@ import java.util.stream.Collectors;
 
 public class JavaCodeLinesCounter {
 
+    private static final String END_OF_MULTILINE_COMMENT = "*/";
+    private static final String BEGGING_OF_MULTILINE_COMMENT = "/*";
+    private static final String INLINE_COMMENT_REGEX = "\\/\\*.*\\*\\/";
+    private static final String ONE_LINE_COMMENT_REGEX = "\\/\\/.*";
+    
     private enum CODE_STATE {
         MULTILINE_OPENED,
         CODE
@@ -32,7 +36,6 @@ public class JavaCodeLinesCounter {
         if (!Files.isDirectory(this.filePath))
             return;
 
-        //children = Arrays.stream(this.filePath.toFile().list()).map(name -> new JavaCodeLinesCounter(this.filePath.toString() + "\\" + name)).collect(Collectors.toList());
         try {
             children = Files.list(this.filePath).map(path -> new JavaCodeLinesCounter(path.toString())).collect(Collectors.toList());
         } catch (IOException e) {
@@ -81,17 +84,17 @@ public class JavaCodeLinesCounter {
         if (codeLine.isEmpty())
             return currentState;
 
-        int endMultilineIndex = indexOfOccurrenceNotInString(codeLine, "*/");
+        int endMultilineIndex = indexOfOccurrenceNotInString(codeLine, END_OF_MULTILINE_COMMENT);
         if (currentState == CODE_STATE.MULTILINE_OPENED && endMultilineIndex < 0)
             return CODE_STATE.MULTILINE_OPENED;
 
         if (currentState == CODE_STATE.MULTILINE_OPENED)
             return getLineState(CODE_STATE.CODE, codeLine.substring(endMultilineIndex + 2));
 
-        String enclosedCommentTrimmed = codeLine.replaceAll("\\/\\*.*\\*\\/", "");
-        String oneLineCommentTrimmed = enclosedCommentTrimmed.replaceAll("\\/\\/.*", "");
+        String enclosedCommentTrimmed = codeLine.replaceAll(INLINE_COMMENT_REGEX, "");
+        String oneLineCommentTrimmed = enclosedCommentTrimmed.replaceAll(ONE_LINE_COMMENT_REGEX, "");
 
-        int startMultilineIndex = indexOfOccurrenceNotInString(oneLineCommentTrimmed, "/*");
+        int startMultilineIndex = indexOfOccurrenceNotInString(oneLineCommentTrimmed, BEGGING_OF_MULTILINE_COMMENT);
 
         if (startMultilineIndex == 0)
             return CODE_STATE.MULTILINE_OPENED;
