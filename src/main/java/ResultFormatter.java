@@ -1,4 +1,6 @@
+import java.util.List;
+
 @FunctionalInterface
 public interface ResultFormatter {
-    void printCountResult(String filename, int codeLines);
+    List<String> formatCodeLineResult(CodeLineResult result);
 }

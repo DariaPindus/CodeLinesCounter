@@ -3,68 +3,77 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-enum CODE_STATE {
-    MULTILINE_OPENED,
-    CODE
-}
 
-public class FileCodeLinesCounter {
+public class JavaCodeLinesCounter {
+
+    private enum CODE_STATE {
+        MULTILINE_OPENED,
+        CODE
+    }
+
     private final Path filePath;
     private int lineCounter = 0;
 
-    private List<FileCodeLinesCounter> children;
+    private List<JavaCodeLinesCounter> children;
 
-    FileCodeLinesCounter(String fileName)  {
+    public JavaCodeLinesCounter(String fileName) {
         validateFileInput(fileName);
         this.filePath = Paths.get(fileName);
-        if (Files.isDirectory(this.filePath)) {
-            try {
-                children = Files.list(this.filePath).map(path -> new FileCodeLinesCounter(path.toString())).collect(Collectors.toList());
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+        setChildrenIfNeeded();
+    }
+
+    private void setChildrenIfNeeded() {
+        if (!Files.isDirectory(this.filePath))
+            return;
+
+        //children = Arrays.stream(this.filePath.toFile().list()).map(name -> new JavaCodeLinesCounter(this.filePath.toString() + "\\" + name)).collect(Collectors.toList());
+        try {
+            children = Files.list(this.filePath).map(path -> new JavaCodeLinesCounter(path.toString())).collect(Collectors.toList());
+        } catch (IOException e) {
+            throw new IllegalArgumentException("Error iterating subfolder " + e.getMessage());
         }
     }
 
     private void validateFileInput(String sourceName) {
+        if (sourceName == null || sourceName.isEmpty())
+            throw new IllegalArgumentException("Empty source name");
         if (!Files.exists(Paths.get(sourceName)))
-            throw new IllegalArgumentException("Incorrect filename");
+            throw new IllegalArgumentException("Incorrect filename: " + sourceName);
+    }
+
+    public CodeLineResult countLinesInFile() {
+        if (Files.isDirectory(filePath)) {
+            CodeLineResult result = new CodeLineResult(filePath);
+            children.forEach(childCounter -> {
+                result.addChild(childCounter.countLinesInFile());
+            });
+            return result;
+        } else {
+            countLines();
+            return new CodeLineResult(filePath, lineCounter);
+        }
     }
 
     private void countLines() {
         try {
             CODE_STATE currentCodeState = CODE_STATE.CODE;
 
-            List<String> lines = Files.readAllLines(filePath, StandardCharsets.UTF_8); //TODO: charset
+            List<String> lines = Files.readAllLines(filePath, StandardCharsets.UTF_8);
             for (String line : lines) {
                 String trimmed = line.trim();
                 if (trimmed.isEmpty())
                     continue;
 
-                CODE_STATE thisLineState = getLineState(currentCodeState, trimmed);
-                currentCodeState = thisLineState;
+                currentCodeState = getLineState(currentCodeState, trimmed);
             }
         } catch (IOException e) {
             e.printStackTrace();
-        }
-    }
-
-    CodeLineResult getLines() {
-        if (Files.isDirectory(filePath)) {
-            CodeLineResult result = new CodeLineResult(filePath);
-            children.forEach(childCounter -> {
-                result.addChild(childCounter.getLines());
-            });
-            return result;
-        }
-        else {
-            countLines();
-            return new CodeLineResult(filePath, lineCounter);
         }
     }
 
@@ -76,7 +85,7 @@ public class FileCodeLinesCounter {
         if (currentState == CODE_STATE.MULTILINE_OPENED && endMultilineIndex < 0)
             return CODE_STATE.MULTILINE_OPENED;
 
-        if (currentState == CODE_STATE.MULTILINE_OPENED && endMultilineIndex > -1)
+        if (currentState == CODE_STATE.MULTILINE_OPENED)
             return getLineState(CODE_STATE.CODE, codeLine.substring(endMultilineIndex + 2));
 
         String enclosedCommentTrimmed = codeLine.replaceAll("\\/\\*.*\\*\\/", "");
@@ -95,7 +104,7 @@ public class FileCodeLinesCounter {
     private int indexOfOccurrenceNotInString(String source, String match) {
         int indexOfMatch = source.indexOf(match);
         Matcher enquotedGroup = Pattern.compile("(\"([^\"]|\"\")*\")").matcher(source);
-        if (enquotedGroup.find()){
+        if (enquotedGroup.find()) {
             return (indexOfMatch > enquotedGroup.start() && indexOfMatch < enquotedGroup.end()) ?
                     -1 : indexOfMatch;
         }
